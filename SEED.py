@@ -41,6 +41,7 @@ S2 = [
     0x30, 0x95, 0x65, 0x3c, 0xb6, 0xe4, 0xbb, 0x7c, 0x0e, 0x50, 0x39, 0x26, 0x32, 0x84, 0x69, 0x93,
     0x37, 0xe7, 0x24, 0xa4, 0xcb, 0x53, 0x0a, 0x87, 0xd9, 0x4c, 0x83, 0x8f, 0xce, 0x3b, 0x4a, 0xb7,
 ]
+
 KC = [
     0x9e3779b9, 0x3c6ef373, 0x78dde6e6, 0xf1bbcdcc,
     0xe3779b99, 0xc6ef3733, 0x8dde6e67, 0x1bbcdccf,
@@ -53,6 +54,8 @@ masks = [0xFC, 0xF3, 0xCF, 0x3F]
 # a1 = S1[11]
 # print(a1)
 
+# 32-бітне до 4 8-бітних
+
 
 def to_blocks_8(hex_value):
     hex_value = hex_value & 0xFFFFFFFF
@@ -61,6 +64,8 @@ def to_blocks_8(hex_value):
     byte2 = (hex_value >> 8) & 0xFF
     byte3 = hex_value & 0xFF
     return byte0, byte1, byte2, byte3
+
+# 128-бітне до 4 32-бітних
 
 
 def to_blocks_32(value):
@@ -72,8 +77,11 @@ def to_blocks_32(value):
     return block0, block1, block2, block3
 
 
+# 4 8-бітних до 32-бітного
 def combine_bytes_8(byte0, byte1, byte2, byte3):
     return (byte0 << 24) | (byte1 << 16) | (byte2 << 8) | byte3
+
+# 4 32-бітних до 128-бітного
 
 
 def combine_blocks_32(block0, block1, block2, block3):
@@ -97,12 +105,16 @@ def G(a, b, c, d):
 
     return a_, b_, c_, d_
 
+# циклічний зсув вправо 64-бітного числа
+
 
 def rotate_right_8(value):
     value = value & 0xFFFFFFFFFFFFFFFF
     rotated = ((value >> 8) | (value << 56)
                ) & 0xFFFFFFFFFFFFFFFF
     return rotated
+
+# циклічний зсув вліво 64-бітного числа
 
 
 def rotate_left_8(value):
@@ -111,12 +123,16 @@ def rotate_left_8(value):
                ) & 0xFFFFFFFFFFFFFFFF
     return rotated
 
+# 64-бітне до 2 32-бітних
+
 
 def split_to_2x32(value):
     value = value & 0xFFFFFFFFFFFFFFFF
     high = (value >> 32) & 0xFFFFFFFF
     low = value & 0xFFFFFFFF
     return high, low
+
+# 2 32-бітних до 64-бітного
 
 
 def combine_2x32_to_64(high, low):
@@ -148,12 +164,16 @@ def GenerateRoundKeys(key):
             a, b = split_to_2x32(ab)
     return keys
 
+# 128-бітне до 2 64-бітних
+
 
 def split_to_2x64(value):
     value = value & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
     high = (value >> 64) & 0xFFFFFFFFFFFFFFFF
     low = value & 0xFFFFFFFFFFFFFFFF
     return high, low
+
+# 2 64-бітних до 128-бітного
 
 
 def combine_2x64_to_128(high, low):
@@ -198,6 +218,21 @@ def Encrypt(num, keys):
     return C
 
 
+def Decrypt(C, keys):
+    L16, R16 = split_to_2x64(C)
+    L = [0] * 16
+    R = [0] * 16
+    L[15] = L16
+    R[15] = R16
+    for i in range(15, 0, -1):
+        Ri = L[i]
+        Li = R[i] ^ F(L[i], keys[2 * (i - 1)], keys[2 * (i - 1) + 1])
+        L[i - 1] = Li
+        R[i - 1] = Ri
+    num = combine_2x64_to_128(L[0], R[0])
+    return num
+
+
 keys = [
     0x7c8f8c7e, 0xc737a22c, 0xff276cdb, 0xa7ca684a,
     0x2f9d01a1, 0x70049e41, 0xae59b3c4, 0x4245e90c,
@@ -213,9 +248,10 @@ key = 0x0000000000000000000000000000000
 num = 0x00102030405060708090a0b0c0d0e0f
 RoundKeys = GenerateRoundKeys(key)
 print(RoundKeys)
-enk = Encrypt(num, keys)
-print(hex(enk))
-
+enc = Encrypt(num, keys)
+print(hex(enc))
+dec = Decrypt(enc, keys)
+print(hex(dec))
 """key = int("00102030405060708090a0b0c0d0e0f", 16)
 a, b, c, d = to_blocks_32(key)
 print(f"a = {a:08X}, b = {b:08X}, c = {c:08X}, d = {d:08X}")"""
