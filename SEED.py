@@ -126,7 +126,7 @@ def rotate_left_8(value):
 # 64-бітне до 2 32-бітних
 
 
-def split_to_2x32(value):
+def split_64_to_2x32(value):
     value = value & 0xFFFFFFFFFFFFFFFF
     high = (value >> 32) & 0xFFFFFFFF
     low = value & 0xFFFFFFFF
@@ -157,11 +157,11 @@ def GenerateRoundKeys(key):
         if i % 2 == 0:
             cd = combine_2x32_to_64(c, d)
             cd = rotate_left_8(cd)
-            c, d = split_to_2x32(cd)
+            c, d = split_64_to_2x32(cd)
         else:
             ab = combine_2x32_to_64(a, b)
             ab = rotate_right_8(ab)
-            a, b = split_to_2x32(ab)
+            a, b = split_64_to_2x32(ab)
     return keys
 
 # 128-бітне до 2 64-бітних
@@ -184,7 +184,7 @@ def combine_2x64_to_128(high, low):
 
 
 def F(CD, K1, K2):
-    C, D = split_to_2x32(CD)
+    C, D = split_64_to_2x32(CD)
     v1 = (C ^ K1) ^ (D ^ K2)
     v2 = (C ^ K1)
     a1, b1, c1, d1 = to_blocks_8(v1)
