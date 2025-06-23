@@ -2,6 +2,7 @@
 # функція DecryptBlock, яка розшифровує один блок даних
 # функція GenerateRoundKeys, яка розгортає ключ шифрування у послідовність раундових ключів
 
+import math
 
 S1 = [
     0xa9, 0x85, 0xd6, 0xd3, 0x54, 0x1d, 0xac, 0x25, 0x5d, 0x43, 0x18, 0x1e, 0x51, 0xfc, 0xca, 0x63,
@@ -91,19 +92,22 @@ def combine_blocks_32(block0, block1, block2, block3):
            (block3 & 0xFFFFFFFF)
 
 
-def G(a, b, c, d):
+def G(X):
 
-    a1 = S1[a]
-    b1 = S2[b]
-    c1 = S1[c]
-    d1 = S2[d]
+    X3, X2, X1, X0 = to_blocks_8(X)
 
-    a_ = (a1 & masks[0]) ^ (b1 & masks[1]) ^ (c1 & masks[2]) ^ (d1 & masks[3])
-    b_ = (a1 & masks[1]) ^ (b1 & masks[2]) ^ (c1 & masks[3]) ^ (d1 & masks[0])
-    c_ = (a1 & masks[2]) ^ (b1 & masks[3]) ^ (c1 & masks[0]) ^ (d1 & masks[1])
-    d_ = (a1 & masks[3]) ^ (b1 & masks[0]) ^ (c1 & masks[1]) ^ (d1 & masks[2])
+    Z0 = (S1[X0] & masks[0]) ^ (S2[X1] & masks[1]) ^ (
+        S1[X2] & masks[2]) ^ (S2[X3] & masks[3])
+    Z1 = (S1[X0] & masks[1]) ^ (S2[X1] & masks[2]) ^ (
+        S1[X2] & masks[3]) ^ (S2[X3] & masks[0])
+    Z2 = (S1[X0] & masks[2]) ^ (S2[X1] & masks[3]) ^ (
+        S1[X2] & masks[0]) ^ (S2[X3] & masks[1])
+    Z3 = (S1[X0] & masks[3]) ^ (S2[X1] & masks[0]) ^ (
+        S1[X2] & masks[1]) ^ (S2[X3] & masks[2])
 
-    return a_, b_, c_, d_
+    Z = combine_bytes_8(Z3, Z2, Z1, Z0)
+
+    return Z
 
 # циклічний зсув вправо 64-бітного числа
 
@@ -146,22 +150,18 @@ def GenerateRoundKeys(key):
     a, b, c, d = to_blocks_32(key)
     keys = []
     for i in range(16):
-        a1, b1, c1, d1 = to_blocks_8(a + c - KC[i])
-        a2, b2, c2, d2 = G(a1, b1, c1, d1)
-        ki0 = combine_bytes_8(a2, b2, c2, d2)
-        a3, b3, c3, d3 = to_blocks_8(b + KC[i] - d)
-        a4, b4, c4, d4 = G(a3, b3, c3, d3)
-        ki1 = combine_bytes_8(a4, b4, c4, d4)
+        ki0 = G((a + c - KC[i]) & 0xFFFFFFFF)
+        ki1 = G((b + KC[i] - d) & 0xFFFFFFFF)
         keys.append(ki0)
         keys.append(ki1)
         if i % 2 == 0:
-            cd = combine_2x32_to_64(c, d)
-            cd = rotate_left_8(cd)
-            c, d = split_64_to_2x32(cd)
-        else:
             ab = combine_2x32_to_64(a, b)
             ab = rotate_right_8(ab)
             a, b = split_64_to_2x32(ab)
+        else:
+            cd = combine_2x32_to_64(c, d)
+            cd = rotate_left_8(cd)
+            c, d = split_64_to_2x32(cd)
     return keys
 
 # 128-бітне до 2 64-бітних
@@ -187,23 +187,18 @@ def F(CD, K1, K2):
     C, D = split_64_to_2x32(CD)
     v1 = (C ^ K1) ^ (D ^ K2)
     v2 = (C ^ K1)
-    a1, b1, c1, d1 = to_blocks_8(v1)
-    a2, b2, c2, d2 = G(a1, b1, c1, d1)
-    G1 = combine_bytes_8(a2, b2, c2, d2)
-    S1 = G1 + v2
-    a3, b3, c3, d3 = to_blocks_8(S1)
-    a4, b4, c4, d4 = G(a3, b3, c3, d3)
-    G2 = combine_bytes_8(a4, b4, c4, d4)
-    a5, b5, c5, d5 = to_blocks_8(G2 + G1)
-    a6, b6, c6, d6 = G(a5, b5, c5, d5)
-    G3 = combine_bytes_8(a6, b6, c6, d6)
-    C1 = G3 + G2
-    D1 = G2 + G1
+    G1 = G(v1)
+    S1 = (G1 + v2) & 0xFFFFFFFF
+    G2 = G(S1)
+    S2 = (G2 + G1) & 0xFFFFFFFF
+    G3 = G(S2)
+    C1 = (G3 + G2) & 0xFFFFFFFF
+    D1 = G3
     C1D1 = combine_2x32_to_64(C1, D1)
     return C1D1
 
 
-def Encrypt(num, keys):
+def EncryptBlock(num, keys):
     L0, R0 = split_to_2x64(num)
     L = [L0]
     R = [R0]
@@ -212,62 +207,55 @@ def Encrypt(num, keys):
         Ri = L[i - 1] ^ F(R[i - 1], keys[2 * (i - 1)], keys[2 * (i - 1) + 1])
         L.append(Li)
         R.append(Ri)
-    L16 = L[14] ^ F(R[14], keys[30], keys[31])
-    R16 = R[14]
+    L16 = L[15] ^ F(R[15], keys[30], keys[31])
+    R16 = R[15]
     C = combine_2x64_to_128(L16, R16)
     return C
 
 
-def Decrypt(C, keys):
+def DecryptBlock(C, keys):
     L16, R16 = split_to_2x64(C)
-    L = [0] * 16
-    R = [0] * 16
-    L[15] = L16
+    L = [0] * 17
+    R = [0] * 17
+    L[16] = L16
+    R[16] = R16
     R[15] = R16
-    for i in range(15, 0, -1):
-        Ri = L[i]
-        Li = R[i] ^ F(L[i], keys[2 * (i - 1)], keys[2 * (i - 1) + 1])
-        L[i - 1] = Li
-        R[i - 1] = Ri
+    L[15] = L16 ^ F(R[15], keys[30], keys[31])
+    for i in range(14, -1, -1):
+        R[i] = L[i + 1]
+        L[i] = R[i + 1] ^ F(R[i], keys[2 * (i)], keys[2 * (i) + 1])
     num = combine_2x64_to_128(L[0], R[0])
     return num
 
 
-keys = [
-    0x7c8f8c7e, 0xc737a22c, 0xff276cdb, 0xa7ca684a,
-    0x2f9d01a1, 0x70049e41, 0xae59b3c4, 0x4245e90c,
-    0xa1d6400f, 0xdbc1394e, 0x85963508, 0x0c5f1fcb,
-    0xb684bda7, 0x61a4aeae, 0xd17e0741, 0xfee90aa1,
-    0x76cc05d5, 0xe97a7394, 0x50ac6f92, 0x1b2666e5,
-    0x65b7904a, 0x8ec3a7b3, 0x2f7e2e22, 0xa2b121b9,
-    0x4d0bfde4, 0x4e888d9b, 0x631c8ddc, 0x4378a6c4,
-    0x216af65f, 0x7878c031, 0x71891150, 0x98b255b0
-]
+def EncryptData(num, key):
+    keys = GenerateRoundKeys(key)
+    len_num = len(hex(num)[2:])
+    number_of_blocks = math.ceil(len_num / 32)
+    ciphertext = [0] * number_of_blocks
+    for i in range(number_of_blocks, 0, -1):
+        block = num & ((1 << 128) - 1)
+        num = num >> 128
+        block = EncryptBlock(block, keys)
+        ciphertext[i - 1] = block
+    result = 0
+    for block in ciphertext:
+        result = (result << 128) | block
+    return result
 
-key = 0x0000000000000000000000000000000
-num = 0x00102030405060708090a0b0c0d0e0f
-RoundKeys = GenerateRoundKeys(key)
-print(RoundKeys)
-enc = Encrypt(num, keys)
-print(hex(enc))
-dec = Decrypt(enc, keys)
-print(hex(dec))
-"""key = int("00102030405060708090a0b0c0d0e0f", 16)
-a, b, c, d = to_blocks_32(key)
-print(f"a = {a:08X}, b = {b:08X}, c = {c:08X}, d = {d:08X}")"""
 
-'''a, b, c, d = to_blocks_8(0x123000B)
-print()
-print(hex(a), hex(b), hex(c), hex(d))
-abcd = combine_bytes_8(a, b, c, d)
-print(abcd)
-print(hex(abcd))
-a1, b1, c1, d1 = G(a, b, c, d)
-print(hex(a1), hex(b1), hex(c1), hex(d1))
-a1b1c1d1 = combine_bytes_8(a1, b1, c1, d1)
-print(hex(a1b1c1d1))
-s = 0x3000B010706234
-s1 = rotate_right_8(s)
-s2 = rotate_left_8(s)
-print(hex(s1))
-print(hex(s2))'''
+def DecryptData(num, key):
+    keys = GenerateRoundKeys(key)
+    len_num = len(hex(num)[2:])
+    print(len_num)
+    number_of_blocks = math.ceil(len_num / 32)
+    text = [0] * number_of_blocks
+    for i in range(number_of_blocks, 0, -1):
+        block = num & ((1 << 128) - 1)
+        num = num >> 128
+        block = DecryptBlock(block, keys)
+        text[i - 1] = block
+    result = 0
+    for block in text:
+        result = (result << 128) | block
+    return result

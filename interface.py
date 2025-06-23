@@ -1,4 +1,4 @@
-from SEED import Encrypt, Decrypt, GenerateRoundKeys
+from SEED import EncryptData, DecryptData
 
 
 def encrypt():
@@ -17,8 +17,7 @@ def encrypt():
         key = f.read().strip()
         key = int(key, 16)
 
-    round_keys = GenerateRoundKeys(key)
-    ciphertext = Encrypt(text, round_keys)
+    ciphertext = EncryptData(text, key)
 
     with open(ciphertext_file, 'w', encoding='utf-8') as f:
         f.write(hex(ciphertext)[2:])
@@ -42,8 +41,7 @@ def decrypt():
         key = f.read().strip()
         key = int(key, 16)
 
-    round_keys = GenerateRoundKeys(key)
-    text = Decrypt(ciphertext, round_keys)
+    text = DecryptData(ciphertext, key)
 
     with open(text_file, 'w', encoding='utf-8') as f:
         f.write(hex(text)[2:])
